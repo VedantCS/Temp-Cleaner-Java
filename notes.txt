@@ -1,0 +1,275 @@
+// Import necessary Swing and AWT classes
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.io.File;
+
+/**
+ * TempFileCleaner is a Java Swing application that allows users
+ * to select a directory and delete temporary files based on specific extensions.
+ */
+public class TempFileCleaner extends JFrame {
+
+    // GUI components for user interaction
+    private JTextField directoryField;  // Text field to display selected directory path(JTextField is used to allow the user to enter a single line of text)
+    private JTextArea outputArea;//Text area to display output/log messages JTextArea is used when you need a multi-line area for displaying or entering text. 
+    //It's ideal for larger input fields like comments, messages, or logs.
+    
+    private JCheckBox tmpCheck, logCheck, bakCheck, cacheCheck;  // Checkboxes for file types
+
+    /**
+     * Constructor sets up the GUI components and layout.
+     */
+    public TempFileCleaner() {
+        setTitle("Temp File Cleaner");              // Window title
+        setSize(500, 400);                          // Size of the window
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Exit the app when window is closed
+        setLayout(new BorderLayout());              // Use BorderLayout for frame
+
+        // Create a panel for the top section (directory + checkboxes)
+        JPanel panel = new JPanel();
+        panel.setLayout(new GridLayout(2, 1)); // Two rows: one for dir, one for checkboxes
+//*******GridLayout** forces all components in the grid to be the same size, ignoring their preferred sizes.*****
+
+        // === Directory input panel ===
+        JPanel dirPanel = new JPanel();
+        
+        JLabel label = new JLabel("Directory:");         // Label for the text field
+        directoryField = new JTextField(25);// Text field to hold directory path with a width of 25 columns not characters.
+//each column roughly corresponds to the width of one character
+  
+        JButton browseButton = new JButton("Browse");    // Button to browse directory
+        browseButton.addActionListener(e-> browseDirectory(e)); // Attach event handler,uses a lambda expression to handle the button's ActionEvent
+//method addActionListener (expects) takes an object that implements the ActionListener functional interface
+/*e -> browseDirectory(e) This is a lambda expression.It means: "When the button is clicked, take the event object e and call browseDirectory(e)."
+Instead of a lambda, you could write:
+browseButton.addActionListener(new ActionListener() {
+
+    public void actionPerformed(ActionEvent e) {
+        browseDirectory(e);
+    }
+}); So the lambda is just a shortcut that makes the code easier to read and write
+*/
+        
+        
+        dirPanel.add(label);//added according to flow layout
+        dirPanel.add(directoryField);//isa textfield
+        dirPanel.add(browseButton);
+
+        // === Checkbox panel for file types ===
+        JPanel checkPanel = new JPanel();
+        checkPanel.setLayout(new GridLayout(1, 4)); // Layout for checkboxes (1 row, 4 columns)
+        tmpCheck = new JCheckBox(".tmp", true);     // Default selected
+        logCheck = new JCheckBox(".log", true);
+        bakCheck = new JCheckBox(".bak", true);
+        cacheCheck = new JCheckBox(".cache", true);
+        checkPanel.add(tmpCheck);
+        checkPanel.add(logCheck);
+        checkPanel.add(bakCheck);
+        checkPanel.add(cacheCheck);
+
+        // Add directory and checkbox panels to the top panel
+        panel.add(dirPanel);
+        panel.add(checkPanel);
+
+        // === Output area ===
+        outputArea = new JTextArea(10, 40);          // Multi-line text area 10 rows in height 40 columns in width
+        outputArea.setEditable(false);               // User cannot edit output
+        JScrollPane scrollPane = new JScrollPane(outputArea); // Scrollable output area
+
+        // === Delete button ===
+        JButton deleteButton = new JButton("Delete Temp Files"); // Button to trigger deletion
+        deleteButton.addActionListener(e->deleteTempFiles(e));   // Attach event handler
+
+        // Add everything to the main frame
+        add(panel, BorderLayout.NORTH);     // Top section
+        add(scrollPane, BorderLayout.CENTER); // Middle output area
+        add(deleteButton, BorderLayout.SOUTH); // Bottom button
+    }
+
+    /**
+     * Opens a JFileChooser to let the user select a directory.
+     */
+    private void browseDirectory(ActionEvent e) {
+        JFileChooser fileChooser = new JFileChooser();	
+        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY); // Only show folders
+        int returnValue = fileChooser.showOpenDialog(this); // Show dialog box
+//in above "this" refers to the JFrame or JPanel, passed to center the dialog relative to the current window.
+//The method returns an int indicating how the dialog was closed. APPROVE_OPTION=0,(i.e., clicked "Open" or "OK")
+//CANCEL_OPTION= 1(i.e., clicked "Cancel"),ERROR_OPTION=2 indicates that an error occurred while displaying the dialog (this is rare).
+        if (returnValue == JFileChooser.APPROVE_OPTION) {
+            File selectedDirectory = fileChooser.getSelectedFile();
+//is used to retrieve the file or directory that the user selected 
+//.getSelectedFile()method returns the File object that represents the file or directory the user selected.
+            directoryField.setText(selectedDirectory.getAbsolutePath()); // Show path in text field
+        }
+    }
+
+    /**
+     * Deletes selected temporary files from the chosen directory.
+     */
+    private void deleteTempFiles(ActionEvent e) {
+        String dirPath = directoryField.getText(); // Get input path
+        if (dirPath.isEmpty()) {
+            outputArea.setText("Please select a directory first.");
+            return;
+        }
+
+        File directory = new File(dirPath);
+        if (!directory.exists() || !directory.isDirectory()) {
+            outputArea.setText("Invalid directory! Please select a valid folder.");
+            return;
+        }
+
+        // Get the selected file extensions from checkboxes
+        String[] extensions = getSelectedExtensions();
+        if (extensions.length == 0) {
+            outputArea.setText("Please select at least one file type to delete.");
+            return;
+        }
+
+        outputArea.setText("Deleting files...\n");
+        int deletedFiles = cleanTempFiles(directory, extensions); // Perform deletion
+        outputArea.append("\nCleanup complete! Deleted " + deletedFiles + " files.");
+    }
+
+    /**
+     * Collects selected file types from the checkboxes.
+     * @return Array of selected file extensions
+     */
+    private String[] getSelectedExtensions() {
+        return new String[]{
+            tmpCheck.isSelected() ? ".tmp" : null,
+            logCheck.isSelected() ? ".log" : null,
+            bakCheck.isSelected() ? ".bak" : null,
+            cacheCheck.isSelected() ? ".cache" : null
+        };
+    }
+
+    /**
+     * Deletes files in the given directory that match the selected extensions.
+     * @param directory is nothing but  The directory to scan
+     * @param extensions Array of extensions to delete
+     * @return Number of deleted files
+     */
+    private int cleanTempFiles(File directory, String[] extensions) {
+        int deletedCount = 0;
+
+        File[] files = directory.listFiles(); // listFiles() is used with a File object in Java to list all files and directories inside a given directory.
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile() && shouldDelete(file.getName(), extensions)) {
+// isFile() is used in Java to check whether a File object represents a regular file, as opposed to a directory or something else
+//getName() is used with a File object to retrieve the name of the file or directory, without the path. 
+                	
+                    if (file.delete()) {
+                        outputArea.append("Deleted: " + file.getAbsolutePath() + "\n");
+                        deletedCount++;
+                    }
+                }
+            }
+        }
+        return deletedCount;
+    }
+
+    /**
+     * Determines if a file name ends with any of the selected extensions.
+     * @param fileName The name of the file
+     * @param extensions The extensions to check against
+     * @return true if file should be deleted
+     */
+    private boolean shouldDelete(String fileName, String[] extensions) {
+        for (String ext : extensions) {
+            if (ext != null && fileName.endsWith(ext)) {
+//endsWith() is used to check if a string ends with a specific suffix—commonly used for checking file extensions thats why we use it
+//Returns true if the string ends with the given suffix. **AND** Case-sensitive (".TXT" ≠ ".txt" unless you handle case).
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Main method to run the GUI application.
+     */
+    public static void main(String[] args) {
+        // Schedule the GUI to be created on the Event Dispatch Thread
+        SwingUtilities.invokeLater(() -> {
+            TempFileCleaner cleaner = new TempFileCleaner();
+/*SwingUtilities.invokeLater(...) schedules the enclosed code (here, creating and showing our TempFileCleaner window)
+ to run after all pending GUI events have been processed.
+  It guarantees that GUI code runs on the correct thread.
+Ensure that all GUI creation happens on the EDT and Follows standard Swing best practices
+if you used 
+TempFileCleaner cleaner = new TempFileCleaner();
+cleaner.setVisible(true);
+…it might still work in my simple case, but it violates best practice and may cause gui freezing in complex cases
+All events are handled on the Event Dispatch Thread (EDT), 
+so long-running operations (like deleting thousands of files) should ideally be run in a separate thread or SwingWorker to prevent UI freezing.
+ */
+
+   
+            cleaner.setVisible(true); // Show the GUI
+        });
+    }
+}
+
+/*--------------------------------WITHOUT GUI------------------------------------------------
+ * import java.io.File;
+import java.util.Scanner;
+
+public class TempFileCleaner {
+    public static void main(String[] args) {
+        Scanner scanner = new Scanner(System.in);
+        
+      
+        System.out.print("Enter the directory to clean (e.g., C:\\\\Windows\\\\Temp or /tmp): ");
+        String dirPath = scanner.nextLine();
+        
+        File directory = new File(dirPath);
+
+        if (!directory.exists() || !directory.isDirectory()) {
+            System.out.println("Invalid directory! Exiting...");
+            return;
+        }
+
+        // Scan and delete temporary files
+        int deletedFiles = cleanTempFiles(directory);
+        System.out.println("Cleanup complete! Deleted " + deletedFiles + " files.");
+
+        scanner.close();
+    }
+
+    public static int cleanTempFiles(File directory) {
+        int deletedCount = 0;
+
+        // Define file extensions to delete
+        String[] extensions = {".tmp", ".log", ".bak", ".cache"};
+
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isFile() && shouldDelete(file.getName(), extensions)) {
+                    if (file.delete()) {
+                        System.out.println("Deleted: " + file.getAbsolutePath());
+                        deletedCount++;
+                    } else {
+                        System.out.println("Failed to delete: " + file.getAbsolutePath());
+                    }
+                }
+            }
+        }
+        return deletedCount;
+    }
+
+    // Check if the file matches the extensions to delete
+    public static boolean shouldDelete(String fileName, String[] extensions) {
+        for (String ext : extensions) {
+            if (fileName.endsWith(ext)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+*/
